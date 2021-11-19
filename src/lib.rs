@@ -46,6 +46,8 @@ pub enum Input {
 }
 
 pub struct SdlTTY  {
+    events: sdl2::EventPump,
+    context: sdl2::Sdl,
     // underlying canvas
     canvas: sdl2::render::Canvas<Window>,
     /// wether the window has been closed
@@ -114,7 +116,23 @@ impl Port {
 
 impl SdlTTY {
     /// create a new text window from a sdl window
-    pub fn new(window: Window) -> SdlTTY {
+    pub fn new() -> SdlTTY {
+        let sdl_context = sdl2::init().unwrap();
+        let video_subsystem = sdl_context.video().unwrap();
+
+        let window = video_subsystem
+            .window("test text window", 800, 600)
+            .position_centered()
+            .resizable()
+            .opengl()
+            .build()
+            .map_err(|e| e.to_string())
+            .unwrap();
+        
+        video_subsystem.text_input().start();
+        
+        let mut event_pump = sdl_context.event_pump().unwrap();
+    
         let rb = ringbuf::RingBuffer::<Input>::new(20);
         let (prod, cons) = rb.split();
         
@@ -139,6 +157,8 @@ impl SdlTTY {
 
         
         return SdlTTY {
+            context: sdl_context,
+            events: event_pump,
             input_buffer_producer: prod,
             input_buffer: cons,
             spritesheet: spritesheet,
@@ -156,7 +176,8 @@ impl SdlTTY {
         };
     }
     /// collect events form a eventpump, this populates input_buffer
-    pub fn poll(&mut self, event_pump: &mut sdl2::EventPump) {
+    pub fn poll(&mut self) {
+        let event_pump = &mut self.events;
         use sdl2::event::Event;
         for event in event_pump.poll_iter() {
             match event {
