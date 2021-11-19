@@ -1,6 +1,8 @@
 # textwindow
 
-## warning, this is super unstable.
+## warning, this is unstable.
+
+- forking is recomended
 
 A program to draw a text window in sdl2,
 
