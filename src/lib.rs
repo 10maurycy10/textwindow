@@ -17,15 +17,33 @@ use sdl2::pixels::PixelFormatEnum;
 //const SPRITE_W: u32 = 8;
 //const SPRITE_COLS: u32 = 16;
 //const SPRITE_ROWS: u32 = 16;
+//const SPRITE_OFFSET_X: u32 = 0;
+//const SPRITE_OFFSET_Y: u32 = 0;
 //const SPRITE_SHEET: &'static str = "fonts/BrogueFont1.png";
 
-const SPRITE_H: u32 = 14;
+//const SPRITE_H: u32 = 14;
+//const SPRITE_W: u32 = 9;
+//const SPRITE_COLS: u32 = 32;
+//const SPRITE_ROWS: u32 = 8;
+//const SPRITE_OFFSET_X: u32 = 0;
+//const SPRITE_OFFSET_Y: u32 = 0;
+//const SPRITE_SHEET: &'static str = "fonts/codepage850t.png";
+
+const SPRITE_H: u32 = 16;
 const SPRITE_W: u32 = 9;
 const SPRITE_COLS: u32 = 32;
-//const SPRITE_ROWS: u32 = 8;
-const SPRITE_SHEET: &'static str = "fonts/codepage850t.png";
+const SPRITE_ROWS: u32 = 8;
+const SPRITE_OFFSET_X: u32 = 7;
+const SPRITE_OFFSET_Y: u32 = 8;
+const SPRITE_SHEET: &'static str = "fonts/codepage437.png";
 
-const SCALE: u32 = 1;
+const SCALE: u32 = 2;
+
+#[derive(Debug)]
+pub enum Input {
+    Key(Keycode,Mod),
+    Text(String)
+}
 
 pub struct SdlTTY  {
     // underlying canvas
@@ -34,8 +52,8 @@ pub struct SdlTTY  {
     pub is_open: bool,
     /// a buffer containing keycode, modifyer pairs for pressed keys
     /// .poll() must be called to populate this.
-    pub input_buffer: ringbuf::Consumer<(Keycode,Mod)>,
-    input_buffer_producer: ringbuf::Producer<(Keycode,Mod)>,
+    pub input_buffer: ringbuf::Consumer<Input>,
+    input_buffer_producer: ringbuf::Producer<Input>,
     // !!INSAFE TEXTURE!!
     spritesheet: Texture,
     blank: Texture,
@@ -88,12 +106,16 @@ impl Port {
     pub fn get_y_range(&self) -> (u32,u32) {
         (self.orgin.1+self.margin,self.orgin.1+self.size.1-self.margin)
     }
+    /// moves the cursor relative to orign + margin
+    pub fn set_c_inner(&mut self, x: u32,y: u32) {
+        self.cursor = (self.orgin.0 + x + self.margin,self.orgin.1 + y + self.margin);
+    }
 }
 
 impl SdlTTY {
     /// create a new text window from a sdl window
     pub fn new(window: Window) -> SdlTTY {
-        let rb = ringbuf::RingBuffer::<(Keycode,Mod)>::new(10);
+        let rb = ringbuf::RingBuffer::<Input>::new(20);
         let (prod, cons) = rb.split();
         
         let mut canvas = window.into_canvas().build().map_err(|e| e.to_string()).unwrap();
@@ -141,11 +163,13 @@ impl SdlTTY {
                 Event::Quit { .. } => self.is_open = false,
                 Event::KeyDown {keycode, keymod, ..} => {
                     match keycode {
-                        Some(key) => self.input_buffer_producer.push((key,keymod))
+                        Some(key) => self.input_buffer_producer.push(Input::Key(key,keymod))
                             .unwrap_or_else(|e| println!("[tty] failed to push {:?} to buffer, droping", e)),
                         None => ()
                     }
                 },
+                Event::TextInput {text, ..} =>self.input_buffer_producer.push(Input::Text(text))
+                            .unwrap_or_else(|e| println!("[tty] failed to push {:?} to buffer, droping", e)),
                 _ => {}
             }
         }
@@ -176,8 +200,8 @@ impl SdlTTY {
             SPRITE_H*SCALE
         );
         let src_rect = Rect::new(
-            (x * SPRITE_W) as i32, 
-            (y * SPRITE_H) as i32,
+            (x * SPRITE_W + SPRITE_OFFSET_X) as i32, 
+            (y * SPRITE_H + SPRITE_OFFSET_Y) as i32,
             SPRITE_W,
             SPRITE_H
         );
@@ -193,6 +217,9 @@ impl SdlTTY {
         self.spritesheet.set_color_mod(color.r,color.g,color.b);
         self.canvas.copy(&self.spritesheet, src_rect, dest_rect).expect("[tty] copy failed");
         //self.canvas.clear();
+    }
+    pub fn putc_port(&mut self, c :u8,color: Color, pos: (u32,u32),bg: Option<Color>, port: &Port) {
+        self.putc(c,color,(port.orgin.0 + pos.0 + port.margin,port.orgin.0 + pos.1 + port.margin),bg);
     }
     /// compute a port 
     pub fn get_main_port(&self,margin: u32) -> Port {
